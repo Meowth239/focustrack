@@ -21,7 +21,9 @@ def get_or_create_user(telegram_id: int, name: str = None) -> User:
         session.add(user)
         session.commit()
         session.refresh(user)
-    # Don't close session - keep user attached
+    # Expunge removes from session but keeps data accessible
+    session.expunge(user)
+    session.close()
     return user
 
 
@@ -276,9 +278,10 @@ async def log_weight(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = get_or_create_user(update.effective_user.id)
-    
     session = get_session()
+    
+    # Get user from THIS session
+    user = session.query(User).filter(User.telegram_id == update.effective_user.id).first()
     
     # Get recent activities
     activities = session.query(Activity).filter(
