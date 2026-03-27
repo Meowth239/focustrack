@@ -114,6 +114,8 @@ async def log_run(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Log activity
     session = get_session()
+    user_obj = session.query(User).filter(User.telegram_id == user.telegram_id).first()
+    
     activity = Activity(
         user_id=user.telegram_id,
         activity_type="run",
@@ -123,16 +125,20 @@ async def log_run(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     session.add(activity)
     
-    user.total_points += points
-    user.calculate_level()
+    user_obj.total_points += points
+    user_obj.calculate_level()
     session.commit()
+    
+    # Store values before closing
+    level = user_obj.level
+    total_points = user_obj.total_points
     session.close()
     
     await update.message.reply_text(
         f"🏃 *Run logged!*\n"
         f"Distance: {km}km\n"
         f"Points: +{points}\n"
-        f"Level: {user.level} ({user.total_points} total)",
+        f"Level: {level} ({total_points} total)",
         parse_mode="Markdown"
     )
 
@@ -158,6 +164,8 @@ async def log_gym(update: Update, context: ContextTypes.DEFAULT_TYPE):
     points = POINTS_GYM
     
     session = get_session()
+    user_obj = session.query(User).filter(User.telegram_id == user.telegram_id).first()
+    
     activity = Activity(
         user_id=user.telegram_id,
         activity_type="gym",
@@ -167,16 +175,18 @@ async def log_gym(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     session.add(activity)
     
-    user.total_points += points
-    user.calculate_level()
+    user_obj.total_points += points
+    user_obj.calculate_level()
     session.commit()
+    
+    level = user_obj.level
     session.close()
     
     await update.message.reply_text(
         f"💪 *Gym logged!*\n"
         f"Session: {name} ({mins} min)\n"
         f"Points: +{points}\n"
-        f"Level: {user.level}",
+        f"Level: {level}",
         parse_mode="Markdown"
     )
 
@@ -197,6 +207,8 @@ async def log_study(update: Update, context: ContextTypes.DEFAULT_TYPE):
     points = calculate_points("study", mins)
     
     session = get_session()
+    user_obj = session.query(User).filter(User.telegram_id == user.telegram_id).first()
+    
     activity = Activity(
         user_id=user.telegram_id,
         activity_type="study",
@@ -206,9 +218,11 @@ async def log_study(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     session.add(activity)
     
-    user.total_points += points
-    user.calculate_level()
+    user_obj.total_points += points
+    user_obj.calculate_level()
     session.commit()
+    
+    level = user_obj.level
     session.close()
     
     await update.message.reply_text(
@@ -216,7 +230,7 @@ async def log_study(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Subject: {subject}\n"
         f"Time: {mins} min\n"
         f"Points: +{points}\n"
-        f"Level: {user.level}",
+        f"Level: {level}",
         parse_mode="Markdown"
     )
 
@@ -234,18 +248,29 @@ async def log_weight(update: Update, context: ContextTypes.DEFAULT_TYPE):
     weight = float(match.group(1))
     
     session = get_session()
+    
+    # Get user from THIS session
+    user_obj = session.query(User).filter(User.telegram_id == user.telegram_id).first()
+    
     log = WeightLog(user_id=user.telegram_id, weight=weight)
     session.add(log)
     
-    user.current_weight = weight
+    user_obj.current_weight = weight
     session.commit()
+    
+    # Store values before closing
+    current_weight = weight
+    weight_goal = user_obj.weight_goal
     session.close()
+    
+    diff = current_weight - weight_goal
+    direction = "to go" if diff > 0 else "under goal!"
     
     await update.message.reply_text(
         f"⚖️ *Weight logged!*\n"
-        f"Current: {weight}kg\n"
-        f"Goal: {user.weight_goal}kg\n\n"
-        f"{format_weight_progress(user)}",
+        f"Current: {current_weight}kg\n"
+        f"Goal: {weight_goal}kg\n\n"
+        f"📊 {current_weight}kg → {weight_goal}kg ({abs(diff):.1f}kg {direction})",
         parse_mode="Markdown"
     )
 
