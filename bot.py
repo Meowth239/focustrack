@@ -20,11 +20,8 @@ def get_or_create_user(telegram_id: int, name: str = None) -> User:
         user = User(telegram_id=telegram_id, name=name)
         session.add(user)
         session.commit()
-        # Refresh to get generated attributes
         session.refresh(user)
-    # Detach user from session so we can access it after close
-    session.expunge(user)
-    session.close()
+    # Don't close session - keep user attached
     return user
 
 
@@ -268,14 +265,19 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         WeightLog.user_id == user.telegram_id
     ).order_by(WeightLog.logged_at.desc()).limit(5).all()
     
+    # Store values before closing session
+    level = user.level
+    total_points = user.total_points
+    current_weight = user.current_weight or 'Not set'
+    weight_goal = user.weight_goal
     session.close()
     
     # Build message
     msg = f"📊 *Your Stats*\n\n"
-    msg += f"🎯 Level: {user.level}\n"
-    msg += f"⭐ Total Points: {user.total_points}\n"
-    msg += f"⚖️ Current Weight: {user.current_weight or 'Not set'}kg\n"
-    msg += f"🏁 Goal: {user.weight_goal}kg\n\n"
+    msg += f"🎯 Level: {level}\n"
+    msg += f"⭐ Total Points: {total_points}\n"
+    msg += f"⚖️ Current Weight: {current_weight}kg\n"
+    msg += f"🏁 Goal: {weight_goal}kg\n\n"
     
     if activities:
         msg += "📝 *Recent Activity:*\n"
@@ -301,14 +303,18 @@ async def whatnow(update: Update, context: ContextTypes.DEFAULT_TYPE):
         DailyGoal.user_id == user.telegram_id,
         DailyGoal.date == today
     ).first()
+    
+    # Store values before closing
+    exercise_completed = goal.exercise_completed if goal else None
+    study_completed = goal.study_completed if goal else None
     session.close()
     
     suggestions = []
     
     if goal:
-        if not goal.exercise_completed:
+        if not exercise_completed:
             suggestions.append("🏃 Log your exercise (run/gym)")
-        if not goal.study_completed:
+        if not study_completed:
             suggestions.append("📚 Study session")
     
     if not suggestions:
@@ -368,12 +374,16 @@ async def set_intent(update: Update, context: ContextTypes.DEFAULT_TYPE):
         goal.exercise_goal = parts[1]
     
     session.commit()
+    
+    # Store values before closing session
+    study = goal.study_goal or 'None'
+    exercise = goal.exercise_goal or 'None'
     session.close()
     
     await update.message.reply_text(
         f"✅ *Today's Focus Set!*\n\n"
-        f"📚 Study: {goal.study_goal or 'None'}\n"
-        f"🏃 Exercise: {goal.exercise_goal or 'None'}\n\n"
+        f"📚 Study: {study}\n"
+        f"🏃 Exercise: {exercise}\n\n"
         f"Complete them and log with /run, /gym, /study",
         parse_mode="Markdown"
     )
@@ -403,13 +413,15 @@ async def weekly_review(update: Update, context: ContextTypes.DEFAULT_TYPE):
         WeightLog.logged_at >= week_ago
     ).order_by(WeightLog.logged_at).all()
     
-    session.close()
-    
+    # Store values before closing
     if weight_logs:
-        weight_change = weight_logs[-1].weight - weight_logs[0].weight
-        weight_msg = f"{weight_logs[0].weight} → {weight_logs[-1].weight}kg ({weight_change:+.1f})"
+        first_weight = weight_logs[0].weight
+        last_weight = weight_logs[-1].weight
+        weight_change = last_weight - first_weight
+        weight_msg = f"{first_weight} → {last_weight}kg ({weight_change:+.1f})"
     else:
         weight_msg = "No weigh-ins"
+    session.close()
     
     await update.message.reply_text(
         f"📅 *Weekly Review*\n\n"
@@ -420,6 +432,17 @@ async def weekly_review(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"⭐ Points this week: {sum(a.points_earned for a in activities)}",
         parse_mode="Markdown"
     )
+
+
+# ============ ERROR HANDLER ============
+
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle errors gracefully"""
+    print(f"Error: {context.error}")
+    if update and update.message:
+        await update.message.reply_text(
+            "⚠️ Oops! Something went wrong. Please try again."
+        )
 
 
 # ============ MAIN ============
@@ -442,6 +465,9 @@ def run_bot():
     app.add_handler(CommandHandler("whatnow", whatnow))
     app.add_handler(CommandHandler("intent", set_intent))
     app.add_handler(CommandHandler("weekly", weekly_review))
+    
+    # Error handler
+    app.add_error_handler(error_handler)
     
     print("🤖 Bot starting...")
     app.run_polling()
