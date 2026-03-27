@@ -20,6 +20,10 @@ def get_or_create_user(telegram_id: int, name: str = None) -> User:
         user = User(telegram_id=telegram_id, name=name)
         session.add(user)
         session.commit()
+        # Refresh to get generated attributes
+        session.refresh(user)
+    # Detach user from session so we can access it after close
+    session.expunge(user)
     session.close()
     return user
 

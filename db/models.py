@@ -82,3 +82,14 @@ def init_db():
 def get_session():
     """Get a database session"""
     return SessionLocal()
+
+
+def get_user(telegram_id: int) -> User:
+    """Get a user and detach from session for safe access"""
+    session = get_session()
+    user = session.query(User).filter(User.telegram_id == telegram_id).first()
+    if user:
+        # Expunge removes it from session, keeping data accessible after close
+        session.expunge(user)
+    session.close()
+    return user
