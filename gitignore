@@ -1,0 +1,24 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+.env
+.venv
+venv/
+env/
+db/*.db
+*.log
+.DS_Store
+.idea
+.vscode
+*.md
+!requirements.txt
+
+# Docker
+docker-compose.override.yml
