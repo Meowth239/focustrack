@@ -414,6 +414,32 @@ async def set_intent(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def set_goal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Set weight goal"""
+    user = get_or_create_user(update.effective_user.id)
+    
+    text = update.message.text.replace("/goal", "").strip()
+    match = re.match(r"(\d+\.?\d*)", text)
+    
+    if not match:
+        await update.message.reply_text("Usage: /goal [kg]\nExample: /goal 85")
+        return
+    
+    goal = float(match.group(1))
+    
+    session = get_session()
+    user_obj = session.query(User).filter(User.telegram_id == user.telegram_id).first()
+    user_obj.weight_goal = goal
+    session.commit()
+    session.close()
+    
+    await update.message.reply_text(
+        f"🎯 *Weight goal set!*\n"
+        f"Goal: {goal}kg",
+        parse_mode="Markdown"
+    )
+
+
 async def weekly_review(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show weekly summary"""
     user = get_or_create_user(update.effective_user.id)
@@ -486,6 +512,7 @@ def run_bot():
     app.add_handler(CommandHandler("gym", log_gym))
     app.add_handler(CommandHandler("study", log_study))
     app.add_handler(CommandHandler("weight", log_weight))
+    app.add_handler(CommandHandler("goal", set_goal))
     app.add_handler(CommandHandler("stats", show_stats))
     app.add_handler(CommandHandler("whatnow", whatnow))
     app.add_handler(CommandHandler("intent", set_intent))
